@@ -27,7 +27,7 @@ ssh dev@<server-ip>
 - Python 3 + pip
 - Go (ARM64)
 - Claude CLI (@anthropic-ai/claude-code)
-- Claunch (session manager for Claude)
+- Claunch + `cl` command (interactive session manager)
 
 ## What Gets Configured
 
@@ -123,15 +123,28 @@ Host my-claude-server
 
 After login, MOTD displays overview of running Claude sessions.
 
+### Quick Start - Just Type `cl`
+
+The easiest way to work with Claude on the server is the **`cl`** command - an interactive session manager:
+
+```bash
+cl                      # Interactive menu - select existing session or create new one
+```
+
+This gives you a menu to:
+- See all running tmux sessions
+- Attach to any existing session with one keypress
+- Start a new Claude session in current directory
+
 ### New Project
 ```bash
 cd /src
 mkdir my-project && cd my-project
 git init
-claunch
+cl                      # Interactive menu to start Claude
 ```
 
-### Claunch - Session Manager
+### Direct Claunch Commands
 ```bash
 claunch                 # Start Claude in current directory
 claunch --tmux          # Start in tmux (persistent session)
@@ -141,6 +154,8 @@ claunch clean           # Clean orphaned sessions
 
 ### Working with tmux Sessions
 ```bash
+cl                      # Easiest way - interactive menu
+# or manually:
 claunch --tmux          # Start Claude in tmux
 # Ctrl+B, D             # Detach
 tmux attach -t <name>   # Reattach
@@ -148,6 +163,7 @@ tmux attach -t <name>   # Reattach
 
 ### Useful Commands
 ```bash
+cl                      # Interactive session manager
 src                     # Alias for "cd /src"
 cat ~/README.txt        # Quick reference
 ```
