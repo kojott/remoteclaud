@@ -42,6 +42,11 @@ pip install ansible
 - SSH access as root
 - Internet connection
 
+> **💡 Looking for affordable cloud servers?**
+> 
+> [Hetzner Cloud](https://hetzner.cloud/?ref=eWgHw8GraDd5) offers excellent value.
+> Use this referral link to get **€20 free credits** for testing!
+
 ## How to Run
 
 ### 1. Verify Connection
