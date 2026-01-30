@@ -1,0 +1,80 @@
+#!/bin/bash
+# Script for creating new project in /src
+
+set -e
+
+PROJECT_NAME=$1
+SRC_DIR="{{ src_dir }}"
+
+if [ -z "$PROJECT_NAME" ]; then
+    echo "Usage: new-project.sh <project-name>"
+    exit 1
+fi
+
+PROJECT_PATH="$SRC_DIR/$PROJECT_NAME"
+
+if [ -d "$PROJECT_PATH" ]; then
+    echo "Error: Project $PROJECT_NAME already exists"
+    exit 1
+fi
+
+echo "Creating project: $PROJECT_NAME"
+mkdir -p "$PROJECT_PATH"
+cd "$PROJECT_PATH"
+
+# Initialize git repository
+git init
+
+# Create basic structure
+mkdir -p src tests docs
+
+# Create CLAUDE.md for Claude context
+cat > CLAUDE.md << 'EOF'
+# Project: $PROJECT_NAME
+
+## Overview
+[Describe the project here]
+
+## Structure
+- `src/` - Source code
+- `tests/` - Tests
+- `docs/` - Documentation
+
+## Development
+[How to run, test, deploy]
+EOF
+
+# Create .gitignore
+cat > .gitignore << 'EOF'
+# Dependencies
+node_modules/
+vendor/
+__pycache__/
+*.pyc
+
+# Build outputs
+dist/
+build/
+*.o
+*.a
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+EOF
+
+echo "Project created at: $PROJECT_PATH"
+echo ""
+echo "Next steps:"
+echo "  cd $PROJECT_PATH"
+echo "  claunch   # Start Claude in this project"

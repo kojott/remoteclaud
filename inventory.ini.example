@@ -1,0 +1,15 @@
+# Copy this file to inventory.ini and configure your servers
+#
+# cp inventory.ini.example inventory.ini
+
+[claude_servers]
+# Add your servers here:
+# server-name ansible_host=IP_ADDRESS ansible_user=root
+
+# Example:
+# my-server ansible_host=1.2.3.4 ansible_user=root
+
+# Optional: Override git config per group
+# [claude_servers:vars]
+# git_user_name=Your Name
+# git_user_email=your@email.com

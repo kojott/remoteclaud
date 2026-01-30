@@ -1,0 +1,78 @@
+#!/bin/bash
+# Interactive Claude session manager
+# Shortcut: cl
+
+set -e
+
+# Colors
+CYAN='\033[0;36m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo ""
+echo -e "${CYAN}═══════════════════════════════════════════════${NC}"
+echo -e "${CYAN}  CLAUDE SESSION MANAGER${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════${NC}"
+echo ""
+
+# Get tmux sessions
+SESSIONS=$(tmux list-sessions 2>/dev/null || true)
+
+# Build menu
+declare -a SESSION_NAMES
+i=1
+
+if [ -n "$SESSIONS" ]; then
+    echo -e "${GREEN}Running sessions:${NC}"
+    echo ""
+    while IFS= read -r line; do
+        SESSION_NAME=$(echo "$line" | cut -d: -f1)
+        SESSION_NAMES+=("$SESSION_NAME")
+        echo -e "  ${YELLOW}[$i]${NC} $line"
+        ((i++))
+    done <<< "$SESSIONS"
+    echo ""
+fi
+
+# Add option for new session
+echo -e "  ${YELLOW}[$i]${NC} New session (claunch --tmux) in $(pwd)"
+NEW_SESSION_NUM=$i
+
+echo ""
+echo -e "${CYAN}═══════════════════════════════════════════════${NC}"
+echo ""
+
+# Read user input
+read -p "Select number (or Enter for new session): " choice
+
+# Default to new session
+if [ -z "$choice" ]; then
+    choice=$NEW_SESSION_NUM
+fi
+
+# Validate input
+if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+    echo "Invalid choice."
+    exit 1
+fi
+
+if [ "$choice" -lt 1 ] || [ "$choice" -gt "$NEW_SESSION_NUM" ]; then
+    echo "Number out of range."
+    exit 1
+fi
+
+# Execute choice
+if [ "$choice" -eq "$NEW_SESSION_NUM" ]; then
+    echo ""
+    echo -e "${GREEN}Starting claunch --tmux...${NC}"
+    echo ""
+    exec claunch --tmux
+else
+    SESSION_INDEX=$((choice - 1))
+    SESSION_TO_ATTACH="${SESSION_NAMES[$SESSION_INDEX]}"
+    echo ""
+    echo -e "${GREEN}Attaching to session: $SESSION_TO_ATTACH${NC}"
+    echo ""
+    exec tmux attach -t "$SESSION_TO_ATTACH"
+fi

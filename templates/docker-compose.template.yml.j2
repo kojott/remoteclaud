@@ -1,0 +1,35 @@
+# Docker Compose template for development projects
+# Copy to your project and modify as needed
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    restart: unless-stopped
+
+  # Uncomment for database
+  # db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: dev
+  #     POSTGRES_PASSWORD: devpass
+  #     POSTGRES_DB: appdb
+  #   volumes:
+  #     - db_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+
+  # Uncomment for Redis
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"
+
+# volumes:
+#   db_data:

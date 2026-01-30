@@ -1,0 +1,49 @@
+================================================================================
+                    CLAUDE DEV ENVIRONMENT - QUICK REFERENCE
+================================================================================
+
+CLAUNCH - Claude Session Manager
+--------------------------------
+  cl                      Interactive menu - select or create session
+  claunch                 Start Claude in current directory
+  claunch --tmux          Start Claude in tmux (persistent session)
+  claunch list            List running sessions
+  claunch clean           Clean orphaned session files
+
+TYPICAL WORKFLOW
+----------------
+  1. cd /src
+  2. mkdir my-project && cd my-project
+  3. git init
+  4. claunch                    # start Claude
+
+LONG-RUNNING SESSIONS (survive SSH disconnect)
+----------------------------------------------
+  claunch --tmux               # start in tmux
+  Ctrl+B, D                    # detach from session
+  claunch list                 # show sessions
+  tmux attach -t <session>     # reattach
+
+USEFUL COMMANDS
+---------------
+  src                     Alias for "cd /src"
+  docker compose up -d    Start containers in background
+  node --version          Check Node.js version
+  go version              Check Go version
+
+DIRECTORIES
+-----------
+  /src                    Main directory for projects
+  /src/templates          Templates (docker-compose, etc.)
+
+INSTALLED TOOLS
+---------------
+  - Docker CE + Compose
+  - Node.js (via NVM)
+  - Go 1.23.4
+  - Python 3
+  - Claude CLI (@anthropic-ai/claude-code)
+  - Claunch (session manager)
+  - git, tmux, htop, curl, wget
+
+================================================================================

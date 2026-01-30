@@ -1,0 +1,427 @@
+---
+- name: Setup Claude Development Environment
+  hosts: claude_servers
+  become: yes
+  vars:
+    nvm_version: "0.40.1"
+    go_version: "1.23.4"
+    node_version: "lts/*"
+    src_dir: "/src"
+    dev_user: "dev"
+    git_user_name: "Claude Dev"
+    git_user_email: "dev@localhost"
+
+  tasks:
+    # Create dev user
+    - name: Create dev user
+      user:
+        name: "{{ dev_user }}"
+        shell: /bin/bash
+        groups: wheel
+        append: yes
+      tags: [user]
+
+    - name: Allow dev user passwordless sudo
+      lineinfile:
+        path: /etc/sudoers.d/dev
+        line: "{{ dev_user }} ALL=(ALL) NOPASSWD:ALL"
+        create: yes
+        mode: '0440'
+        validate: 'visudo -cf %s'
+      tags: [user]
+
+    - name: Ensure dev .ssh directory exists
+      file:
+        path: "/home/{{ dev_user }}/.ssh"
+        state: directory
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0700'
+      tags: [user]
+
+    - name: Copy root SSH keys to dev user
+      copy:
+        src: /root/.ssh/authorized_keys
+        dest: "/home/{{ dev_user }}/.ssh/authorized_keys"
+        remote_src: yes
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0600'
+      tags: [user]
+
+    # System update
+    - name: Update all packages
+      dnf:
+        name: "*"
+        state: latest
+      tags: [system]
+
+    # EPEL repository (needed for htop and other tools)
+    - name: Install EPEL repository
+      dnf:
+        name: epel-release
+        state: present
+      tags: [system]
+
+    # Basic tools
+    - name: Install basic tools
+      dnf:
+        name:
+          - git
+          - tmux
+          - htop
+          - curl
+          - wget
+          - unzip
+          - tar
+        state: present
+      tags: [tools]
+
+    # Development Tools group
+    - name: Install Development Tools group
+      dnf:
+        name: "@Development Tools"
+        state: present
+      tags: [tools]
+
+    # Docker CE installation
+    - name: Add Docker CE repository
+      command: dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+      args:
+        creates: /etc/yum.repos.d/docker-ce.repo
+      tags: [docker]
+
+    - name: Install Docker CE and plugins
+      dnf:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+      tags: [docker]
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+      tags: [docker]
+
+    - name: Add dev user to docker group
+      user:
+        name: "{{ dev_user }}"
+        groups: docker
+        append: yes
+      tags: [docker, user]
+
+    # NVM and Node.js
+    - name: Download NVM install script
+      get_url:
+        url: "https://raw.githubusercontent.com/nvm-sh/nvm/v{{ nvm_version }}/install.sh"
+        dest: /tmp/nvm_install.sh
+        mode: '0755'
+      tags: [node]
+
+    - name: Install NVM
+      shell: bash /tmp/nvm_install.sh
+      args:
+        creates: "{{ ansible_env.HOME }}/.nvm/nvm.sh"
+      environment:
+        HOME: "{{ ansible_env.HOME }}"
+      tags: [node]
+
+    - name: Install Node.js LTS via NVM
+      shell: |
+        source {{ ansible_env.HOME }}/.nvm/nvm.sh
+        nvm install --lts
+        nvm alias default node
+      args:
+        executable: /bin/bash
+        creates: "{{ ansible_env.HOME }}/.nvm/versions/node"
+      tags: [node]
+
+    # Python
+    - name: Install Python3 and pip
+      dnf:
+        name:
+          - python3
+          - python3-pip
+        state: present
+      tags: [python]
+
+    # Go installation (ARM64)
+    - name: Download Go for ARM64
+      get_url:
+        url: "https://go.dev/dl/go{{ go_version }}.linux-arm64.tar.gz"
+        dest: /tmp/go.tar.gz
+      tags: [go]
+
+    - name: Remove existing Go installation
+      file:
+        path: /usr/local/go
+        state: absent
+      tags: [go]
+
+    - name: Extract Go
+      unarchive:
+        src: /tmp/go.tar.gz
+        dest: /usr/local
+        remote_src: yes
+      tags: [go]
+
+    # Claude CLI
+    - name: Install Claude CLI via npm
+      shell: |
+        source {{ ansible_env.HOME }}/.nvm/nvm.sh
+        npm install -g @anthropic-ai/claude-code
+      args:
+        executable: /bin/bash
+      tags: [claude]
+
+    # Claunch installation
+    - name: Create ~/bin directory
+      file:
+        path: "{{ ansible_env.HOME }}/bin"
+        state: directory
+        mode: '0755'
+      tags: [claunch]
+
+    - name: Install Claunch
+      shell: |
+        bash <(curl -s https://raw.githubusercontent.com/0xkaz/claunch/main/install.sh)
+      args:
+        executable: /bin/bash
+        creates: "{{ ansible_env.HOME }}/bin/claunch"
+      tags: [claunch]
+
+    - name: Install cl session manager script
+      template:
+        src: templates/cl.sh.j2
+        dest: "{{ ansible_env.HOME }}/bin/cl"
+        mode: '0755'
+      tags: [claunch]
+
+    # Create /src directory
+    - name: Create /src directory
+      file:
+        path: "{{ src_dir }}"
+        state: directory
+        mode: '0755'
+      tags: [dirs]
+
+    # Templates
+    - name: Create templates directory
+      file:
+        path: "{{ src_dir }}/templates"
+        state: directory
+        mode: '0755'
+      tags: [templates]
+
+    - name: Copy new-project.sh template
+      template:
+        src: templates/new-project.sh.j2
+        dest: "{{ src_dir }}/templates/new-project.sh"
+        mode: '0755'
+      tags: [templates]
+
+    - name: Copy docker-compose template
+      template:
+        src: templates/docker-compose.template.yml.j2
+        dest: "{{ src_dir }}/templates/docker-compose.template.yml"
+        mode: '0644'
+      tags: [templates]
+
+    - name: Copy README to home directory
+      template:
+        src: templates/README.txt.j2
+        dest: "{{ ansible_env.HOME }}/README.txt"
+        mode: '0644'
+      tags: [templates]
+
+    # MOTD (Message of the Day)
+    - name: Copy MOTD script
+      template:
+        src: templates/motd.sh.j2
+        dest: /etc/profile.d/claude-motd.sh
+        mode: '0755'
+      tags: [motd]
+
+    # PATH configuration in .bashrc
+    - name: Configure PATH in .bashrc
+      blockinfile:
+        path: "{{ ansible_env.HOME }}/.bashrc"
+        marker: "# {mark} ANSIBLE MANAGED - Claude Dev Environment"
+        block: |
+          # Go
+          export PATH=$PATH:/usr/local/go/bin
+          export PATH=$PATH:{{ ansible_env.HOME }}/go/bin
+
+          # Claunch and local bin
+          export PATH=$PATH:{{ ansible_env.HOME }}/bin
+
+          # NVM
+          export NVM_DIR="{{ ansible_env.HOME }}/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+          [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+
+          # Projects directory
+          export SRC_DIR={{ src_dir }}
+          alias src="cd {{ src_dir }}"
+      tags: [config]
+
+    # Git global configuration (root)
+    - name: Configure git user name
+      git_config:
+        name: user.name
+        value: "{{ git_user_name }}"
+        scope: global
+      tags: [config, git]
+
+    - name: Configure git user email
+      git_config:
+        name: user.email
+        value: "{{ git_user_email }}"
+        scope: global
+      tags: [config, git]
+
+    # =========================================
+    # DEV USER SETUP (for Claude CLI)
+    # =========================================
+
+    - name: Install NVM for dev user
+      become_user: "{{ dev_user }}"
+      shell: bash /tmp/nvm_install.sh
+      args:
+        creates: "/home/{{ dev_user }}/.nvm/nvm.sh"
+      environment:
+        HOME: "/home/{{ dev_user }}"
+      tags: [node, user]
+
+    - name: Install Node.js LTS for dev user
+      become_user: "{{ dev_user }}"
+      shell: |
+        source /home/{{ dev_user }}/.nvm/nvm.sh
+        nvm install --lts
+        nvm alias default node
+      args:
+        executable: /bin/bash
+        creates: "/home/{{ dev_user }}/.nvm/versions/node"
+      tags: [node, user]
+
+    - name: Create ~/bin for dev user
+      file:
+        path: "/home/{{ dev_user }}/bin"
+        state: directory
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0755'
+      tags: [claunch, user]
+
+    - name: Install Claunch for dev user
+      become_user: "{{ dev_user }}"
+      shell: |
+        bash <(curl -s https://raw.githubusercontent.com/0xkaz/claunch/main/install.sh)
+      args:
+        executable: /bin/bash
+        creates: "/home/{{ dev_user }}/bin/claunch"
+      tags: [claunch, user]
+
+    - name: Install cl session manager script for dev user
+      template:
+        src: templates/cl.sh.j2
+        dest: "/home/{{ dev_user }}/bin/cl"
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0755'
+      tags: [claunch, user]
+
+    - name: Install Claude CLI for dev user
+      become_user: "{{ dev_user }}"
+      shell: |
+        source /home/{{ dev_user }}/.nvm/nvm.sh
+        npm install -g @anthropic-ai/claude-code
+      args:
+        executable: /bin/bash
+      tags: [claude, user]
+
+    - name: Configure PATH in dev user .bashrc
+      blockinfile:
+        path: "/home/{{ dev_user }}/.bashrc"
+        marker: "# {mark} ANSIBLE MANAGED - Claude Dev Environment"
+        block: |
+          # Go
+          export PATH=$PATH:/usr/local/go/bin
+          export PATH=$PATH:/home/{{ dev_user }}/go/bin
+
+          # Claunch and local bin
+          export PATH=$PATH:/home/{{ dev_user }}/bin
+
+          # NVM
+          export NVM_DIR="/home/{{ dev_user }}/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+          [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+
+          # Projects directory
+          export SRC_DIR={{ src_dir }}
+          alias src="cd {{ src_dir }}"
+      tags: [config, user]
+
+    - name: Configure git for dev user
+      become_user: "{{ dev_user }}"
+      git_config:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        scope: global
+      loop:
+        - { name: 'user.name', value: '{{ git_user_name }}' }
+        - { name: 'user.email', value: '{{ git_user_email }}' }
+      tags: [config, git, user]
+
+    - name: Copy README to dev home directory
+      template:
+        src: templates/README.txt.j2
+        dest: "/home/{{ dev_user }}/README.txt"
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0644'
+      tags: [templates, user]
+
+    - name: Give dev user ownership of /src
+      file:
+        path: "{{ src_dir }}"
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        recurse: yes
+      tags: [dirs, user]
+
+    # Verification tasks
+    - name: Verify Docker installation
+      command: docker --version
+      register: docker_version
+      changed_when: false
+      tags: [verify]
+
+    - name: Verify Node.js installation
+      shell: |
+        source {{ ansible_env.HOME }}/.nvm/nvm.sh
+        node --version
+      args:
+        executable: /bin/bash
+      register: node_version_output
+      changed_when: false
+      tags: [verify]
+
+    - name: Verify Go installation
+      command: /usr/local/go/bin/go version
+      register: go_version_output
+      changed_when: false
+      tags: [verify]
+
+    - name: Display versions
+      debug:
+        msg:
+          - "Docker: {{ docker_version.stdout }}"
+          - "Node.js: {{ node_version_output.stdout }}"
+          - "Go: {{ go_version_output.stdout }}"
+      tags: [verify]

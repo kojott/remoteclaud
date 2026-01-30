@@ -1,0 +1,30 @@
+#!/bin/bash
+# Dynamic MOTD script
+
+echo ""
+echo "==============================================="
+echo "  CLAUDE DEV SERVER"
+echo "==============================================="
+echo ""
+echo "  Quick start:    cl   (interactive session menu)"
+echo "  Help:           cat ~/README.txt"
+echo ""
+
+# Show running tmux sessions with claunch
+SESSIONS=$(tmux list-sessions 2>/dev/null | grep -E "claunch|claude" || true)
+if [ -n "$SESSIONS" ]; then
+    echo "  RUNNING CLAUDE SESSIONS:"
+    echo "  -------------------------"
+    echo "$SESSIONS" | while read line; do
+        echo "    $line"
+    done
+    echo ""
+    echo "  Attach:         tmux attach -t <name>"
+    echo ""
+else
+    echo "  No running Claude sessions."
+    echo ""
+fi
+
+echo "==============================================="
+echo ""
