@@ -2,6 +2,16 @@
 
 Ansible playbook for automated installation of Claude development environment on Rocky Linux ARM64 servers.
 
+---
+
+## ☁️ Need a Server? I Recommend Hetzner Cloud
+
+I personally use [**Hetzner Cloud**](https://hetzner.cloud/?ref=eWgHw8GraDd5) for all my Claude dev servers - great performance, unbeatable prices, and ARM64 support.
+
+**👉 [Get €20 FREE credits with this link](https://hetzner.cloud/?ref=eWgHw8GraDd5)** - enough to test this setup for weeks!
+
+---
+
 **IMPORTANT:** For working with Claude CLI, login as user `dev` (not root):
 ```bash
 ssh dev@<server-ip>
@@ -41,11 +51,6 @@ pip install ansible
 - Rocky Linux 9 (ARM64)
 - SSH access as root
 - Internet connection
-
-> **💡 Looking for affordable cloud servers?**
-> 
-> [Hetzner Cloud](https://hetzner.cloud/?ref=eWgHw8GraDd5) offers excellent value.
-> Use this referral link to get **€20 free credits** for testing!
 
 ## How to Run
 
