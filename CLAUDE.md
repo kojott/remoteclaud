@@ -1,146 +1,96 @@
 # Claude Dev Environment Automation
 
-## What This Project Does
+Ansible playbook for provisioning Claude CLI dev environments on Rocky Linux ARM64 servers.
 
-Ansible playbook for automated installation of a development environment for working with Claude CLI on remote Rocky Linux ARM64 servers.
+## Quick Reference
 
-**IMPORTANT:** Claude CLI cannot run as root. Use the `dev` user for development:
 ```bash
-ssh dev@<server-ip>
+# Deploy to all servers
+ansible-playbook -i inventory.ini playbook.yml
+
+# Deploy specific component
+ansible-playbook -i inventory.ini playbook.yml --tags cl
+ansible-playbook -i inventory.ini playbook.yml --tags motd,templates
+
+# Dry run
+ansible-playbook -i inventory.ini playbook.yml --check --diff
 ```
+
+## Architecture
+
+- **Single playbook** (`playbook.yml`) with tagged tasks — no roles
+- **Jinja2 templates** in `templates/` deployed to server paths
+- **Two users**: `root` (Ansible target) and `dev` (Claude CLI, docker)
+- **`cl` session manager** (`templates/cl.sh.j2`) orchestrates Claude CLI inside tmux
+- **Variables** at top of `playbook.yml` (versions, paths, permissions)
 
 ## Project Structure
 
 ```
-remoteclaude/
-├── inventory.ini.example  # Server list template
-├── inventory.ini          # Your local server list (git ignored)
-├── playbook.yml           # Main Ansible playbook
-├── server-readme.txt      # Local copy of server README
+├── playbook.yml                         # All tasks, tagged
+├── inventory.ini.example                # Template — copy to inventory.ini
 └── templates/
-    ├── new-project.sh.j2           # New project script
-    ├── docker-compose.template.yml.j2  # Docker template
-    ├── README.txt.j2               # README for ~/README.txt
-    ├── motd.sh.j2                  # MOTD on login
-    ├── cl.sh.j2                    # Session manager ("cl" command)
-    └── tmux-cl.conf.j2             # tmux config for cl sessions
+    ├── cl.sh.j2                         # cl session manager (~680 lines)
+    ├── tmux-cl.conf.j2                  # tmux config for cl
+    ├── motd.sh.j2                       # Login MOTD
+    ├── README.txt.j2                    # ~/README.txt on server
+    ├── new-project.sh.j2               # /src/templates/new-project.sh
+    └── docker-compose.template.yml.j2  # Docker compose template
 ```
-
-## Key Server Components
-
-### Directory Structure
-- `/src` - Main directory for projects
-- `/src/templates` - Templates for new projects
-- `~/README.txt` - Quick reference
-- `~/bin/cl` - Session manager
-- `~/.tmux-cl.conf` - tmux config for cl sessions
-
-### Users
-- **root** - Ansible deployment, system administration
-- **dev** - Development, Claude CLI, docker (member of docker group)
-
-### Installed Tools
-- **Docker CE** - Containers
-- **Node.js** (via NVM) - JavaScript runtime (root and dev)
-- **Go** - For Go projects
-- **Python 3** - Python runtime
-- **Claude CLI** - `@anthropic-ai/claude-code` (root and dev)
-- **cl** - Session manager (root and dev)
-
-### PATH Configuration
-Added to `.bashrc`:
-- `/usr/local/go/bin` - Go binaries
-- `~/go/bin` - Go projects
-- `~/bin` - Local binaries (cl)
-- NVM setup
-
-### MOTD
-On login displays:
-- Quick start commands
-- List of running Claude/tmux sessions
 
 ## Playbook Tags
 
-| Tag | Description |
-|-----|-------------|
-| `system` | System update, EPEL |
-| `tools` | Basic tools (git, tmux, htop...) |
+| Tag | Scope |
+|-----|-------|
+| `system` | OS update, EPEL |
+| `tools` | git, tmux, htop, curl, wget |
 | `docker` | Docker CE + Compose |
-| `node` | NVM + Node.js |
+| `node` | NVM + Node.js LTS |
 | `python` | Python 3 + pip |
-| `go` | Go lang |
-| `claude` | Claude CLI |
-| `cl` | cl session manager (also responds to `--tags claunch`) |
-| `dirs` | Directories (/src) |
-| `templates` | Templates + ~/README.txt |
-| `motd` | MOTD script |
-| `config` | .bashrc configuration |
-| `git` | Git user configuration |
-| `user` | Dev user setup (NVM, Node, Claude, cl) |
-| `verify` | Installation verification |
+| `go` | Go (ARM64) |
+| `claude` | Claude CLI via npm |
+| `cl` | cl session manager + tmux config (also: `claunch` for backward compat) |
+| `dirs` | /src directory |
+| `templates` | README.txt, new-project.sh, docker-compose template |
+| `motd` | Login MOTD |
+| `config` | .bashrc PATH setup |
+| `git` | Git user config |
+| `user` | All dev user tasks |
+| `verify` | Version checks |
 
-## How to Add a New Server
-
-1. Copy the example inventory (if not done already):
-```bash
-cp inventory.ini.example inventory.ini
-```
-
-2. Add to `inventory.ini`:
-```ini
-new-server ansible_host=IP_ADDRESS ansible_user=root
-```
-
-3. Run: `ansible-playbook -i inventory.ini playbook.yml`
-
-## How to Add New Software
-
-1. Add task to `playbook.yml` in appropriate section
-2. Add tag for selective installation
-3. Update README.md and this file
-
-## Playbook Variables
+## Key Variables
 
 ```yaml
-vars:
-  nvm_version: "0.40.1"
-  go_version: "1.23.4"
-  node_version: "lts/*"
-  src_dir: "/src"
-  dev_user: "dev"
-  git_user_name: "Claude Dev"      # Customize for your setup
-  git_user_email: "dev@localhost"  # Customize for your setup
+cl_default_permission_mode: "skip"  # "skip" | "acceptEdits"
+nvm_version: "0.40.1"
+go_version: "1.23.4"
+dev_user: "dev"
+src_dir: "/src"
 ```
 
-## Common Modifications
+## Conventions
 
-### Change Go Version
-In `playbook.yml` change `go_version` variable.
+- Templates use `.j2` extension, deployed paths drop it
+- Tags on every task — `[component]` or `[component, user]` for dev-user tasks
+- Migration/cleanup tasks use `changed_when: false` for idempotency
+- `cl` tag also includes `claunch` for backward compat with existing automation
 
-### Change Node.js Version
-In `playbook.yml` change `nvm_version` or modify `nvm install` command.
+## Verification
 
-### Modify MOTD
-Edit `templates/motd.sh.j2` and run:
 ```bash
-ansible-playbook -i inventory.ini playbook.yml --tags motd
+# Syntax check the cl script template (render Jinja2 first)
+bash -n test/cl.sh
+
+# Docker-based functional test
+./test/run-test.sh
+
+# Ansible dry run
+ansible-playbook -i inventory.ini playbook.yml --check --diff
 ```
 
-### Modify Server README
-Edit `templates/README.txt.j2` and run:
-```bash
-ansible-playbook -i inventory.ini playbook.yml --tags templates
-```
+## Gotchas
 
-### Customize Git User
-Override in `inventory.ini` per host or group:
-```ini
-[claude_servers:vars]
-git_user_name=Your Name
-git_user_email=your@email.com
-```
-
-## Dependencies
-
-- **Claude CLI**: npm package @anthropic-ai/claude-code
-- **EPEL**: Required for htop on Rocky Linux
+- Claude CLI cannot run as root — always target `dev` user for Claude tasks
+- `cl.sh.j2` uses `set -eo pipefail` — arithmetic expressions returning 0 cause exit (use `++var` not `var++`)
+- `--tags claunch` still works (dual-tagged) but `claunch` binary is removed on deploy
+- `cl -w` requires a git repository — delegates to `claude --worktree`

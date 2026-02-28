@@ -486,7 +486,7 @@ cl_menu() {
         echo ""
 
         while IFS='|' read -r name attached activity; do
-            (( session_count++ ))
+            (( ++session_count ))
             session_names+=("$name")
             session_states+=("$attached")
 

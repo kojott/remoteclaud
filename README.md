@@ -1,209 +1,210 @@
-# Claude Dev Environment - Ansible Automation
+# remoteclaud
 
-Ansible playbook for automated installation of Claude development environment on Rocky Linux ARM64 servers.
+Ansible playbook that sets up a complete Claude Code development environment on Rocky Linux ARM64 servers. One command, fully configured — Docker, Node.js, Go, Python, Claude CLI, and the `cl` session manager.
 
----
-
-## ☁️ Need a Server? I Recommend Hetzner Cloud
-
-I personally use [**Hetzner Cloud**](https://hetzner.cloud/?ref=eWgHw8GraDd5) for all my Claude dev servers - great performance, unbeatable prices, and ARM64 support.
-
-**👉 [Get €20 FREE credits with this link](https://hetzner.cloud/?ref=eWgHw8GraDd5)** - enough to test this setup for weeks!
-
----
-
-**IMPORTANT:** For working with Claude CLI, login as user `dev` (not root):
-```bash
-ssh dev@<server-ip>
-```
-
-## What Gets Installed
-
-- EPEL repository
-- Basic tools (git, tmux, htop, curl, wget)
-- Development Tools (gcc, make, ...)
-- Docker CE + Docker Compose plugin
-- NVM + Node.js LTS
-- Python 3 + pip
-- Go (ARM64)
-- Claude CLI (@anthropic-ai/claude-code)
-- `cl` command (session manager)
-
-## What Gets Configured
-
-- `/src` directory for projects
-- `~/README.txt` - quick reference for working on server
-- MOTD - shows running Claude sessions on login
-- PATH in `.bashrc` for Go, NVM, ~/bin
-
-## Requirements
-
-### Local Machine
-```bash
-# macOS
-brew install ansible
-
-# or pip
-pip install ansible
-```
-
-### Server
-- Rocky Linux 9 (ARM64)
-- SSH access as root
-- Internet connection
-
-## How to Run
-
-### 1. Verify Connection
-```bash
-ansible -i inventory.ini claude_servers -m ping
-```
-
-### 2. Dry Run (test without changes)
-```bash
-ansible-playbook -i inventory.ini playbook.yml --check
-```
-
-### 3. Installation
 ```bash
 ansible-playbook -i inventory.ini playbook.yml
 ```
 
-### 4. Specific Tags Only
+Then SSH in and start working:
+
 ```bash
-# Docker only
+ssh dev@your-server
+cl    # interactive session manager
+```
+
+---
+
+## What You Get
+
+**Development tools**: Docker CE, Node.js (NVM), Go, Python 3, git, tmux, htop
+
+**Claude Code**: CLI installed for both root and dev users, ready to use
+
+**`cl` session manager**: Persistent Claude sessions in tmux with smart reattach, named sessions, worktrees, conversation resume, and cleanup
+
+```
+═══════════════════════════════════════════════════════
+  cl - Session Manager                  /src/my-project
+═══════════════════════════════════════════════════════
+
+  SESSIONS
+
+  [1]  my-project          attached      2h ago
+  [2]  api-server          detached     35m ago
+  [3]  feature-x    [wt]   detached      3h ago
+
+  ─────────────────────────────────────────────────────
+
+  [n]  New session        [w]  New worktree session
+  [c]  New from last chat  [r]  Pick past conversation
+  [x]  Clean up (1 orphaned)
+
+═══════════════════════════════════════════════════════
+  Select [1-3, n, w, c, r, x] or Enter for [2]:
+```
+
+## Requirements
+
+| | |
+|---|---|
+| **Server** | Rocky Linux 9 (ARM64), root SSH access |
+| **Local** | Ansible (`brew install ansible` or `pip install ansible`) |
+
+## Quick Start
+
+```bash
+# 1. Clone and configure
+git clone https://github.com/kojott/remoteclaud.git
+cd remoteclaud
+cp inventory.ini.example inventory.ini
+# Edit inventory.ini with your server IP
+
+# 2. Test connection
+ansible -i inventory.ini claude_servers -m ping
+
+# 3. Deploy
+ansible-playbook -i inventory.ini playbook.yml
+
+# 4. Start working
+ssh dev@your-server
+cl
+```
+
+## `cl` — Session Manager
+
+All Claude sessions run in tmux, surviving SSH disconnects. Just `cl` to get back.
+
+```bash
+cl                      # Interactive menu (start here)
+cl -a <name>            # Attach to session directly
+cl -n <name>            # New named session
+cl -w [name]            # New worktree session (requires git repo)
+cl -c                   # Continue last conversation
+cl -r                   # Pick past conversation to resume
+cl -l                   # List sessions
+cl -x                   # Clean up dead sessions & orphaned worktrees
+cl -h                   # Help
+```
+
+**Smart defaults**: Press Enter to reattach to the most recent detached session — the most common action after SSH reconnect.
+
+**Worktrees**: `cl -w feature` delegates to `claude --worktree` for isolated git branches.
+
+**Cleanup**: Two-phase — lists candidates first, never auto-deletes worktrees with uncommitted changes.
+
+## Selective Deployment
+
+Every task is tagged. Deploy only what you need:
+
+```bash
 ansible-playbook -i inventory.ini playbook.yml --tags docker
-
-# Claude tools only
 ansible-playbook -i inventory.ini playbook.yml --tags claude,cl
-
-# MOTD and README only
 ansible-playbook -i inventory.ini playbook.yml --tags motd,templates
 ```
 
-## Adding a New Server
+| Tag | What it does |
+|-----|-------------|
+| `system` | OS update, EPEL repo |
+| `tools` | git, tmux, htop, curl, wget, Development Tools |
+| `docker` | Docker CE + Compose |
+| `node` | NVM + Node.js LTS |
+| `python` | Python 3 + pip |
+| `go` | Go (ARM64) |
+| `claude` | Claude CLI |
+| `cl` | `cl` session manager + tmux config |
+| `dirs` | `/src` directory |
+| `templates` | Server README, new-project script, docker-compose template |
+| `motd` | Login message |
+| `config` | `.bashrc` PATH setup |
+| `git` | Git user config |
+| `user` | All dev-user tasks |
+| `verify` | Version checks |
 
-1. Copy the example inventory (if not done already):
-```bash
-cp inventory.ini.example inventory.ini
-```
+## Adding Servers
 
-2. Edit `inventory.ini`:
 ```ini
+# inventory.ini
 [claude_servers]
-my-server ansible_host=1.2.3.4 ansible_user=root
-another-server ansible_host=5.6.7.8 ansible_user=root
+server-1 ansible_host=1.2.3.4 ansible_user=root
+server-2 ansible_host=5.6.7.8 ansible_user=root
 
 [claude_servers:vars]
 git_user_name=Your Name
 git_user_email=your@email.com
 ```
 
-3. Run the playbook:
-```bash
-ansible-playbook -i inventory.ini playbook.yml
+## Configuration
+
+Variables at the top of `playbook.yml`:
+
+```yaml
+vars:
+  nvm_version: "0.40.1"
+  go_version: "1.23.4"
+  dev_user: "dev"
+  src_dir: "/src"
+  cl_default_permission_mode: "skip"   # "skip" or "acceptEdits"
+  git_user_name: "Claude Dev"
+  git_user_email: "dev@localhost"
 ```
 
 ## VS Code Remote SSH
 
-### Configuration (~/.ssh/config)
 ```
+# ~/.ssh/config
 Host my-claude-server
     HostName 1.2.3.4
     User dev
     IdentityFile ~/.ssh/id_rsa
 ```
 
-### Workflow
-1. VS Code: `Cmd+Shift+P` → "Remote-SSH: Connect to Host"
-2. Select `my-claude-server`
-3. Open `/src/<project>`
-
-## Working on the Server
-
-After login, MOTD displays overview of running Claude sessions.
-
-### Quick Start - Just Type `cl`
-
-The easiest way to work with Claude on the server is the **`cl`** command - an interactive session manager:
-
-```bash
-cl                      # Interactive menu - select existing session or create new one
-```
-
-This gives you a menu to:
-- See all running tmux sessions
-- Attach to any existing session with one keypress
-- Start a new Claude session in current directory
-
-### New Project
-```bash
-cd /src
-mkdir my-project && cd my-project
-git init
-cl                      # Interactive menu to start Claude
-```
-
-### Session Management
-```bash
-cl                      # Interactive menu (start here)
-cl -n fix-auth          # New named session
-cl -w new-feature       # Worktree session via claude --worktree
-cl -c                   # New session from last conversation
-cl -r                   # Pick past conversation to resume
-cl -l                   # List sessions
-cl -x                   # Clean up orphaned sessions
-# Ctrl+B, D             # Detach from tmux session
-cl                      # Reattach (smart default)
-```
-
-### Useful Commands
-```bash
-cl                      # Interactive session manager
-src                     # Alias for "cd /src"
-cat ~/README.txt        # Quick reference
-```
+Then: `Cmd+Shift+P` → "Remote-SSH: Connect to Host" → Open `/src/<project>`
 
 ## Project Structure
 
 ```
-remoteclaude/
-├── README.md                            # This file
-├── CLAUDE.md                            # Context for Claude
-├── inventory.ini.example               # Server list template (copy to inventory.ini)
-├── inventory.ini                        # Your local server list (git ignored)
-├── playbook.yml                         # Main Ansible playbook
-├── server-readme.txt                    # Copy of README for server
+remoteclaud/
+├── playbook.yml                         # Ansible playbook (all tasks)
+├── inventory.ini.example                # Server list template
+├── test/                                # Docker-based test environment
+│   ├── Dockerfile
+│   ├── mock-claude.sh
+│   └── run-test.sh
 └── templates/
-    ├── new-project.sh.j2                # New project script
-    ├── docker-compose.template.yml.j2   # Docker template
-    ├── README.txt.j2                    # README for ~/README.txt
-    ├── motd.sh.j2                       # MOTD script
-    ├── cl.sh.j2                         # Session manager
-    └── tmux-cl.conf.j2                  # tmux config for cl sessions
+    ├── cl.sh.j2                         # cl session manager
+    ├── tmux-cl.conf.j2                  # tmux config for cl
+    ├── motd.sh.j2                       # Login MOTD
+    ├── README.txt.j2                    # ~/README.txt on server
+    ├── new-project.sh.j2               # New project script
+    └── docker-compose.template.yml.j2  # Docker template
+```
+
+## Testing
+
+```bash
+# Docker-based functional test of cl session manager
+./test/run-test.sh
+
+# Ansible dry run against real server
+ansible-playbook -i inventory.ini playbook.yml --check --diff
 ```
 
 ## Troubleshooting
 
-### SSH Key Not Accepted
-```bash
-ssh-copy-id root@<server-ip>
-```
+| Problem | Fix |
+|---------|-----|
+| SSH key not accepted | `ssh-copy-id root@server-ip` |
+| Ansible can't reach server | `ansible -i inventory.ini claude_servers -m ping -vvv` |
+| Docker not running | `systemctl status docker && journalctl -u docker` |
+| `cl` not found | `source ~/.bashrc` or run `~/bin/cl` directly |
 
-### Ansible Can't See Server
-```bash
-ansible -i inventory.ini claude_servers -m ping -vvv
-```
+---
 
-### Docker Not Working
-```bash
-systemctl status docker
-journalctl -u docker
-```
+### Need a Server?
 
-### cl Not in PATH
-```bash
-source ~/.bashrc
-# or
-~/bin/cl -h
-```
+I use [Hetzner Cloud](https://hetzner.cloud/?ref=eWgHw8GraDd5) for all my Claude dev servers — ARM64 support, great performance, unbeatable prices. [Get **€20 free credits**](https://hetzner.cloud/?ref=eWgHw8GraDd5) to try this setup.
+
+## License
+
+[MIT](LICENSE)
