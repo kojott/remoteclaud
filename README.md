@@ -13,6 +13,10 @@ ssh dev@your-server
 cl    # interactive session manager
 ```
 
+> **Need a server?** I run this on [**Hetzner Cloud**](https://hetzner.cloud/?ref=eWgHw8GraDd5) — ARM64, great performance, unbeatable prices. **[Get €20 free credits](https://hetzner.cloud/?ref=eWgHw8GraDd5)** — enough to run this setup for weeks.
+>
+> If this project or the referral link helped you, consider giving it a :star: or [buying me a coffee](https://buymeacoffee.com/kojott). Thanks!
+
 ---
 
 ## What You Get
@@ -198,12 +202,6 @@ ansible-playbook -i inventory.ini playbook.yml --check --diff
 | Ansible can't reach server | `ansible -i inventory.ini claude_servers -m ping -vvv` |
 | Docker not running | `systemctl status docker && journalctl -u docker` |
 | `cl` not found | `source ~/.bashrc` or run `~/bin/cl` directly |
-
----
-
-### Need a Server?
-
-I use [Hetzner Cloud](https://hetzner.cloud/?ref=eWgHw8GraDd5) for all my Claude dev servers — ARM64 support, great performance, unbeatable prices. [Get **€20 free credits**](https://hetzner.cloud/?ref=eWgHw8GraDd5) to try this setup.
 
 ## License
 
