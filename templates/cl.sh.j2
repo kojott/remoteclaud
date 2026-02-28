@@ -162,7 +162,7 @@ cl_new_session() {
             [nN])
                 local suffix=2
                 while cl_session_exists "${session}-${suffix}"; do
-                    (( suffix++ ))
+                    (( ++suffix ))
                 done
                 session="${session}-${suffix}"
                 cl_log "  Creating session: $session"
@@ -543,7 +543,7 @@ cl_menu() {
         while IFS='|' read -r name attached activity; do
             local age=$(( now - activity ))
             if [ "$attached" -eq 0 ] && [ "$age" -gt "$DEAD_SESSION_AGE" ]; then
-                (( orphan_count++ ))
+                (( ++orphan_count ))
             fi
         done <<< "$all_sessions"
     fi
