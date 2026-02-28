@@ -1,5 +1,9 @@
 #!/bin/bash
 # Dynamic MOTD script
+# Only show on interactive SSH login, not in tmux panes or scripts
+
+[[ $- != *i* ]] && return
+[ -n "$TMUX" ] && return
 
 echo ""
 echo -e "  \033[1mCLAUDE DEV SERVER\033[0m"
