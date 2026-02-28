@@ -48,7 +48,9 @@ ansible-playbook -i inventory.ini playbook.yml --check --diff
 | `node` | NVM + Node.js LTS |
 | `python` | Python 3 + pip |
 | `go` | Go (ARM64) |
-| `claude` | Claude CLI via npm |
+| `claude` | Claude CLI + plugins + claude-gc |
+| `plugins` | Claude Code plugins only |
+| `claude-gc` | claude-gc only |
 | `cl` | cl session manager + tmux config (also: `claunch` for backward compat) |
 | `dirs` | /src directory |
 | `templates` | README.txt, new-project.sh, docker-compose template |
@@ -62,6 +64,7 @@ ansible-playbook -i inventory.ini playbook.yml --check --diff
 
 ```yaml
 cl_default_permission_mode: "skip"  # "skip" | "acceptEdits"
+claude_plugins: [...]               # List of Claude Code plugins to install
 nvm_version: "0.40.1"
 go_version: "1.23.4"
 dev_user: "dev"

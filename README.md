@@ -13,9 +13,13 @@ ssh dev@your-server
 cl    # interactive session manager
 ```
 
-> **Need a server?** I run this on [**Hetzner Cloud**](https://hetzner.cloud/?ref=eWgHw8GraDd5) — ARM64, great performance, unbeatable prices. **[Get €20 free credits](https://hetzner.cloud/?ref=eWgHw8GraDd5)** — enough to run this setup for weeks.
->
-> If this project or the referral link helped you, consider giving it a :star: or [buying me a coffee](https://revolut.me/jiricrzl). Thanks!
+### :cloud: Need a Server?
+
+I run this on [**Hetzner Cloud**](https://hetzner.cloud/?ref=eWgHw8GraDd5) — ARM64 servers, great performance, unbeatable prices.
+
+**[:point_right: Get €20 FREE credits](https://hetzner.cloud/?ref=eWgHw8GraDd5)** — enough to run this setup for weeks.
+
+<sub>If this saved you time, consider giving it a :star: or [buying me a coffee](https://revolut.me/jiricrzl).</sub>
 
 ---
 
@@ -23,7 +27,9 @@ cl    # interactive session manager
 
 **Development tools**: Docker CE, Node.js (NVM), Go, Python 3, git, tmux, htop
 
-**Claude Code**: CLI installed for both root and dev users, ready to use
+**Claude Code**: CLI with plugins pre-installed — code-review, context7, playwright, superpowers, and more
+
+**[claude-gc](https://github.com/kojott/claude-gc)**: Automatic cleanup of orphaned Claude processes (saves ~220MB RAM per leaked process)
 
 **`cl` session manager**: Persistent Claude sessions in tmux with smart reattach, named sessions, worktrees, conversation resume, and cleanup
 
@@ -115,7 +121,9 @@ ansible-playbook -i inventory.ini playbook.yml --tags motd,templates
 | `node` | NVM + Node.js LTS |
 | `python` | Python 3 + pip |
 | `go` | Go (ARM64) |
-| `claude` | Claude CLI |
+| `claude` | Claude CLI + plugins + claude-gc |
+| `plugins` | Claude Code plugins only |
+| `claude-gc` | claude-gc only |
 | `cl` | `cl` session manager + tmux config |
 | `dirs` | `/src` directory |
 | `templates` | Server README, new-project script, docker-compose template |
