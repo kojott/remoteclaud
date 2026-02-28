@@ -15,7 +15,7 @@ cl    # interactive session manager
 
 > **Need a server?** I run this on [**Hetzner Cloud**](https://hetzner.cloud/?ref=eWgHw8GraDd5) — ARM64, great performance, unbeatable prices. **[Get €20 free credits](https://hetzner.cloud/?ref=eWgHw8GraDd5)** — enough to run this setup for weeks.
 >
-> If this project or the referral link helped you, consider giving it a :star: or [buying me a coffee](https://buymeacoffee.com/kojott). Thanks!
+> If this project or the referral link helped you, consider giving it a :star: or [buying me a coffee](https://revolut.me/jiricrzl). Thanks!
 
 ---
 
