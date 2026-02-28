@@ -20,7 +20,6 @@
       - ralph-loop
       - security-guidance
       - superpowers
-      - claude-docu-optimizer
 
   tasks:
     # Create dev user
@@ -388,6 +387,26 @@
       args:
         executable: /bin/bash
       loop: "{{ claude_plugins }}"
+      tags: [claude, plugins, user]
+
+    # claude-docu-optimizer (custom marketplace plugin)
+    - name: Add claude-docu-optimizer marketplace for dev user
+      become_user: "{{ dev_user }}"
+      shell: |
+        source /home/{{ dev_user }}/.nvm/nvm.sh
+        claude plugin marketplace add https://github.com/kojott/claude-docu-optimizer
+      args:
+        executable: /bin/bash
+      changed_when: false
+      tags: [claude, plugins, user]
+
+    - name: Install claude-docu-optimizer plugin for dev user
+      become_user: "{{ dev_user }}"
+      shell: |
+        source /home/{{ dev_user }}/.nvm/nvm.sh
+        claude plugin install docu-optimizer@claude-docu-optimizer
+      args:
+        executable: /bin/bash
       tags: [claude, plugins, user]
 
     # claude-gc (orphaned process cleanup)
