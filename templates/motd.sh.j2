@@ -2,29 +2,22 @@
 # Dynamic MOTD script
 
 echo ""
-echo "==============================================="
-echo "  CLAUDE DEV SERVER"
-echo "==============================================="
-echo ""
-echo "  Quick start:    cl   (interactive session menu)"
-echo "  Help:           cat ~/README.txt"
+echo -e "  \033[1mCLAUDE DEV SERVER\033[0m"
 echo ""
 
-# Show running tmux sessions with claunch
-SESSIONS=$(tmux list-sessions 2>/dev/null | grep -E "claunch|claude" || true)
-if [ -n "$SESSIONS" ]; then
-    echo "  RUNNING CLAUDE SESSIONS:"
-    echo "  -------------------------"
-    echo "$SESSIONS" | while read line; do
-        echo "    $line"
-    done
-    echo ""
-    echo "  Attach:         tmux attach -t <name>"
-    echo ""
-else
-    echo "  No running Claude sessions."
+# Count sessions
+TOTAL=$(tmux list-sessions 2>/dev/null | grep -cE "^(cl-|claude-)" || true)
+ATTACHED=$(tmux list-sessions 2>/dev/null | grep -E "^(cl-|claude-)" | grep -c "(attached)" || true)
+DETACHED=$(( TOTAL - ATTACHED ))
+
+if [ "$TOTAL" -gt 0 ]; then
+    # Collect project names from session names
+    PROJECTS=$(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep -E "^(cl-|claude-)" | sed 's/^cl-//;s/^claude-//' | sed 's/-wt-.*//;s/-cont-.*//;s/-resume-.*//' | sort -u | head -5 | tr '\n' ', ' | sed 's/,$//' | sed 's/,/, /g')
+
+    echo "  Sessions:  $TOTAL active ($ATTACHED attached, $DETACHED detached)"
+    [ -n "$PROJECTS" ] && echo "  Projects:  $PROJECTS"
     echo ""
 fi
 
-echo "==============================================="
+echo "  Type 'cl' to manage sessions"
 echo ""

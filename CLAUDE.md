@@ -22,7 +22,8 @@ remoteclaude/
     ├── docker-compose.template.yml.j2  # Docker template
     ├── README.txt.j2               # README for ~/README.txt
     ├── motd.sh.j2                  # MOTD on login
-    └── cl.sh.j2                    # Interactive session manager ("cl" command)
+    ├── cl.sh.j2                    # Session manager ("cl" command)
+    └── tmux-cl.conf.j2             # tmux config for cl sessions
 ```
 
 ## Key Server Components
@@ -31,8 +32,8 @@ remoteclaude/
 - `/src` - Main directory for projects
 - `/src/templates` - Templates for new projects
 - `~/README.txt` - Quick reference
-- `~/bin/claunch` - Claunch binary
-- `~/bin/cl` - Interactive session manager
+- `~/bin/cl` - Session manager
+- `~/.tmux-cl.conf` - tmux config for cl sessions
 
 ### Users
 - **root** - Ansible deployment, system administration
@@ -44,13 +45,13 @@ remoteclaude/
 - **Go** - For Go projects
 - **Python 3** - Python runtime
 - **Claude CLI** - `@anthropic-ai/claude-code` (root and dev)
-- **Claunch** - Session manager (root and dev) - https://github.com/0xkaz/claunch
+- **cl** - Session manager (root and dev)
 
 ### PATH Configuration
 Added to `.bashrc`:
 - `/usr/local/go/bin` - Go binaries
 - `~/go/bin` - Go projects
-- `~/bin` - Claunch and local binaries
+- `~/bin` - Local binaries (cl)
 - NVM setup
 
 ### MOTD
@@ -69,13 +70,13 @@ On login displays:
 | `python` | Python 3 + pip |
 | `go` | Go lang |
 | `claude` | Claude CLI |
-| `claunch` | Claunch session manager |
+| `cl` | cl session manager (also responds to `--tags claunch`) |
 | `dirs` | Directories (/src) |
 | `templates` | Templates + ~/README.txt |
 | `motd` | MOTD script |
 | `config` | .bashrc configuration |
 | `git` | Git user configuration |
-| `user` | Dev user setup (NVM, Node, Claude, Claunch) |
+| `user` | Dev user setup (NVM, Node, Claude, cl) |
 | `verify` | Installation verification |
 
 ## How to Add a New Server
@@ -141,6 +142,5 @@ git_user_email=your@email.com
 
 ## Dependencies
 
-- **Claunch**: https://github.com/0xkaz/claunch (installed to ~/bin)
 - **Claude CLI**: npm package @anthropic-ai/claude-code
 - **EPEL**: Required for htop on Rocky Linux

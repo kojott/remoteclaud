@@ -2,27 +2,30 @@
                     CLAUDE DEV ENVIRONMENT - QUICK REFERENCE
 ================================================================================
 
-CLAUNCH - Claude Session Manager
---------------------------------
-  cl                      Interactive menu - select or create session
-  claunch                 Start Claude in current directory
-  claunch --tmux          Start Claude in tmux (persistent session)
-  claunch list            List running sessions
-  claunch clean           Clean orphaned session files
+cl - Session Manager
+---------------------
+  cl                      Interactive menu (start here)
+  cl -a <name>            Attach to session directly
+  cl -n <name>            New named session
+  cl -w [name]            New worktree session
+  cl -c                   New session from last conversation
+  cl -r                   Pick past conversation to resume
+  cl -l                   List sessions
+  cl -x                   Clean up orphaned sessions
+  cl -h                   Help
 
 TYPICAL WORKFLOW
 ----------------
   1. cd /src
   2. mkdir my-project && cd my-project
   3. git init
-  4. claunch                    # start Claude
+  4. cl                         # start Claude via session manager
 
 LONG-RUNNING SESSIONS (survive SSH disconnect)
 ----------------------------------------------
-  claunch --tmux               # start in tmux
-  Ctrl+B, D                    # detach from session
-  claunch list                 # show sessions
-  tmux attach -t <session>     # reattach
+  cl                            # start or attach to session
+  Ctrl+B, D                     # detach from session
+  cl                            # reattach (smart default)
 
 USEFUL COMMANDS
 ---------------
@@ -43,7 +46,7 @@ INSTALLED TOOLS
   - Go {{ go_version }}
   - Python 3
   - Claude CLI (@anthropic-ai/claude-code)
-  - Claunch (session manager)
+  - cl (session manager)
   - git, tmux, htop, curl, wget
 
 ================================================================================

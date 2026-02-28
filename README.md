@@ -27,7 +27,7 @@ ssh dev@<server-ip>
 - Python 3 + pip
 - Go (ARM64)
 - Claude CLI (@anthropic-ai/claude-code)
-- Claunch + `cl` command (interactive session manager)
+- `cl` command (session manager)
 
 ## What Gets Configured
 
@@ -75,7 +75,7 @@ ansible-playbook -i inventory.ini playbook.yml
 ansible-playbook -i inventory.ini playbook.yml --tags docker
 
 # Claude tools only
-ansible-playbook -i inventory.ini playbook.yml --tags claude,claunch
+ansible-playbook -i inventory.ini playbook.yml --tags claude,cl
 
 # MOTD and README only
 ansible-playbook -i inventory.ini playbook.yml --tags motd,templates
@@ -144,21 +144,17 @@ git init
 cl                      # Interactive menu to start Claude
 ```
 
-### Direct Claunch Commands
+### Session Management
 ```bash
-claunch                 # Start Claude in current directory
-claunch --tmux          # Start in tmux (persistent session)
-claunch list            # List running sessions
-claunch clean           # Clean orphaned sessions
-```
-
-### Working with tmux Sessions
-```bash
-cl                      # Easiest way - interactive menu
-# or manually:
-claunch --tmux          # Start Claude in tmux
-# Ctrl+B, D             # Detach
-tmux attach -t <name>   # Reattach
+cl                      # Interactive menu (start here)
+cl -n fix-auth          # New named session
+cl -w new-feature       # Worktree session via claude --worktree
+cl -c                   # New session from last conversation
+cl -r                   # Pick past conversation to resume
+cl -l                   # List sessions
+cl -x                   # Clean up orphaned sessions
+# Ctrl+B, D             # Detach from tmux session
+cl                      # Reattach (smart default)
 ```
 
 ### Useful Commands
@@ -183,7 +179,8 @@ remoteclaude/
     ├── docker-compose.template.yml.j2   # Docker template
     ├── README.txt.j2                    # README for ~/README.txt
     ├── motd.sh.j2                       # MOTD script
-    └── cl.sh.j2                         # Interactive session manager
+    ├── cl.sh.j2                         # Session manager
+    └── tmux-cl.conf.j2                  # tmux config for cl sessions
 ```
 
 ## Troubleshooting
@@ -204,9 +201,9 @@ systemctl status docker
 journalctl -u docker
 ```
 
-### Claunch Not in PATH
+### cl Not in PATH
 ```bash
 source ~/.bashrc
 # or
-~/bin/claunch --help
+~/bin/cl -h
 ```

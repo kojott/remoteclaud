@@ -10,6 +10,7 @@
     dev_user: "dev"
     git_user_name: "Claude Dev"
     git_user_email: "dev@localhost"
+    cl_default_permission_mode: "skip"  # "skip" = --dangerously-skip-permissions, "acceptEdits" = safer alternative
 
   tasks:
     # Create dev user
@@ -179,28 +180,39 @@
         executable: /bin/bash
       tags: [claude]
 
-    # Claunch installation
+    # cl session manager
     - name: Create ~/bin directory
       file:
         path: "{{ ansible_env.HOME }}/bin"
         state: directory
         mode: '0755'
-      tags: [claunch]
-
-    - name: Install Claunch
-      shell: |
-        bash <(curl -s https://raw.githubusercontent.com/0xkaz/claunch/main/install.sh)
-      args:
-        executable: /bin/bash
-        creates: "{{ ansible_env.HOME }}/bin/claunch"
-      tags: [claunch]
+      tags: [cl, claunch]
 
     - name: Install cl session manager script
       template:
         src: templates/cl.sh.j2
         dest: "{{ ansible_env.HOME }}/bin/cl"
         mode: '0755'
-      tags: [claunch]
+      tags: [cl, claunch]
+
+    - name: Deploy tmux config for cl
+      template:
+        src: templates/tmux-cl.conf.j2
+        dest: "{{ ansible_env.HOME }}/.tmux-cl.conf"
+        mode: '0644'
+      tags: [cl, claunch]
+
+    - name: Remove legacy claunch binary
+      file:
+        path: "{{ ansible_env.HOME }}/bin/claunch"
+        state: absent
+      changed_when: false
+      tags: [cl, claunch]
+
+    - name: Remove legacy claunch session files
+      shell: rm -f {{ ansible_env.HOME }}/.claude_session_* {{ ansible_env.HOME }}/.claunch_warning_acknowledged
+      changed_when: false
+      tags: [cl, claunch]
 
     # Create /src directory
     - name: Create /src directory
@@ -257,7 +269,7 @@
           export PATH=$PATH:/usr/local/go/bin
           export PATH=$PATH:{{ ansible_env.HOME }}/go/bin
 
-          # Claunch and local bin
+          # Local bin
           export PATH=$PATH:{{ ansible_env.HOME }}/bin
 
           # NVM
@@ -316,16 +328,7 @@
         owner: "{{ dev_user }}"
         group: "{{ dev_user }}"
         mode: '0755'
-      tags: [claunch, user]
-
-    - name: Install Claunch for dev user
-      become_user: "{{ dev_user }}"
-      shell: |
-        bash <(curl -s https://raw.githubusercontent.com/0xkaz/claunch/main/install.sh)
-      args:
-        executable: /bin/bash
-        creates: "/home/{{ dev_user }}/bin/claunch"
-      tags: [claunch, user]
+      tags: [cl, claunch, user]
 
     - name: Install cl session manager script for dev user
       template:
@@ -334,7 +337,28 @@
         owner: "{{ dev_user }}"
         group: "{{ dev_user }}"
         mode: '0755'
-      tags: [claunch, user]
+      tags: [cl, claunch, user]
+
+    - name: Deploy tmux config for cl (dev user)
+      template:
+        src: templates/tmux-cl.conf.j2
+        dest: "/home/{{ dev_user }}/.tmux-cl.conf"
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0644'
+      tags: [cl, claunch, user]
+
+    - name: Remove legacy claunch binary (dev user)
+      file:
+        path: "/home/{{ dev_user }}/bin/claunch"
+        state: absent
+      changed_when: false
+      tags: [cl, claunch, user]
+
+    - name: Remove legacy claunch session files (dev user)
+      shell: rm -f /home/{{ dev_user }}/.claude_session_* /home/{{ dev_user }}/.claunch_warning_acknowledged
+      changed_when: false
+      tags: [cl, claunch, user]
 
     - name: Install Claude CLI for dev user
       become_user: "{{ dev_user }}"
@@ -354,7 +378,7 @@
           export PATH=$PATH:/usr/local/go/bin
           export PATH=$PATH:/home/{{ dev_user }}/go/bin
 
-          # Claunch and local bin
+          # Local bin
           export PATH=$PATH:/home/{{ dev_user }}/bin
 
           # NVM
