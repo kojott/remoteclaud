@@ -21,6 +21,7 @@ CLAUDE_ARGS="--dangerously-skip-permissions"
 {% else %}
 CLAUDE_ARGS="--permission-mode {{ cl_default_permission_mode }}"
 {% endif %}
+{% raw %}
 
 # Colors
 readonly RED='\033[0;31m'
@@ -677,3 +678,4 @@ cl_main() {
 # ============================================================================
 
 cl_main "$@"
+{% endraw %}

@@ -1,0 +1,89 @@
+#!/bin/bash
+# claude-init - Post-login initialization for Claude Dev Environment
+# Run this once after first SSH login and completing Claude CLI setup.
+# Installs plugins, claude-gc, and verifies the environment.
+#
+# Usage: claude-init
+#
+# Deployed by Ansible
+
+set -eo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+echo ""
+echo -e "${BOLD}Claude Dev Environment - Post-Login Init${NC}"
+echo ""
+
+# Check Claude CLI is available and initialized
+if ! command -v claude &>/dev/null; then
+    echo -e "${RED}Error: Claude CLI not found. Is NVM/Node set up?${NC}"
+    exit 1
+fi
+
+CLAUDE_VER=$(claude --version 2>/dev/null || true)
+if [ -z "$CLAUDE_VER" ]; then
+    echo -e "${RED}Error: Claude CLI not responding. Run 'claude' first to complete setup.${NC}"
+    exit 1
+fi
+echo -e "  Claude CLI: ${GREEN}${CLAUDE_VER}${NC}"
+
+# Install plugins
+PLUGINS=(
+{% for plugin in claude_plugins %}
+    "{{ plugin }}"
+{% endfor %}
+)
+
+echo ""
+echo -e "${BOLD}Installing plugins...${NC}"
+FAILED=0
+for plugin in "${PLUGINS[@]}"; do
+    echo -n "  $plugin ... "
+    if claude plugin install "$plugin" &>/dev/null; then
+        echo -e "${GREEN}ok${NC}"
+    else
+        echo -e "${YELLOW}skipped (already installed or not found)${NC}"
+        (( ++FAILED ))
+    fi
+done
+
+# Custom marketplace plugin: docu-optimizer
+echo -n "  docu-optimizer (custom marketplace) ... "
+claude plugin marketplace add https://github.com/kojott/claude-docu-optimizer &>/dev/null || true
+if claude plugin install docu-optimizer@claude-docu-optimizer &>/dev/null; then
+    echo -e "${GREEN}ok${NC}"
+else
+    echo -e "${YELLOW}skipped${NC}"
+    (( ++FAILED ))
+fi
+
+# Install claude-gc
+echo ""
+echo -e "${BOLD}Installing claude-gc...${NC}"
+if [ -f "$HOME/.claude/claude-gc.sh" ]; then
+    echo -e "  ${DIM}Already installed${NC}"
+else
+    echo -n "  Installing... "
+    if curl -fsSL https://raw.githubusercontent.com/kojott/claude-gc/main/install.sh | bash &>/dev/null; then
+        echo -e "${GREEN}ok${NC}"
+    else
+        echo -e "${RED}failed${NC}"
+        (( ++FAILED ))
+    fi
+fi
+
+# Summary
+echo ""
+if [ "$FAILED" -eq 0 ]; then
+    echo -e "${GREEN}${BOLD}All done!${NC} Environment is ready."
+else
+    echo -e "${YELLOW}${BOLD}Done with $FAILED warnings.${NC} Some plugins may need manual install."
+fi
+echo -e "  Type ${BOLD}cl${NC} to start a Claude session."
+echo ""

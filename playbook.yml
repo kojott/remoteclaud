@@ -378,46 +378,15 @@
         executable: /bin/bash
       tags: [claude, user]
 
-    # Claude Code plugins
-    - name: Install Claude Code plugins for dev user
-      become_user: "{{ dev_user }}"
-      shell: |
-        source /home/{{ dev_user }}/.nvm/nvm.sh
-        claude plugin install {{ item }}
-      args:
-        executable: /bin/bash
-      loop: "{{ claude_plugins }}"
+    # claude-init script (plugins + claude-gc, run manually after first login)
+    - name: Deploy claude-init script for dev user
+      template:
+        src: templates/claude-init.sh.j2
+        dest: "/home/{{ dev_user }}/bin/claude-init"
+        owner: "{{ dev_user }}"
+        group: "{{ dev_user }}"
+        mode: '0755'
       tags: [claude, plugins, user]
-
-    # claude-docu-optimizer (custom marketplace plugin)
-    - name: Add claude-docu-optimizer marketplace for dev user
-      become_user: "{{ dev_user }}"
-      shell: |
-        source /home/{{ dev_user }}/.nvm/nvm.sh
-        claude plugin marketplace add https://github.com/kojott/claude-docu-optimizer
-      args:
-        executable: /bin/bash
-      changed_when: false
-      tags: [claude, plugins, user]
-
-    - name: Install claude-docu-optimizer plugin for dev user
-      become_user: "{{ dev_user }}"
-      shell: |
-        source /home/{{ dev_user }}/.nvm/nvm.sh
-        claude plugin install docu-optimizer@claude-docu-optimizer
-      args:
-        executable: /bin/bash
-      tags: [claude, plugins, user]
-
-    # claude-gc (orphaned process cleanup)
-    - name: Install claude-gc for dev user
-      become_user: "{{ dev_user }}"
-      shell: |
-        curl -fsSL https://raw.githubusercontent.com/kojott/claude-gc/main/install.sh | bash
-      args:
-        executable: /bin/bash
-        creates: "/home/{{ dev_user }}/.claude/claude-gc.sh"
-      tags: [claude, claude-gc, user]
 
     - name: Configure PATH in dev user .bashrc
       blockinfile:
