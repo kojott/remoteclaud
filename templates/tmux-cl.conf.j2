@@ -1,16 +1,15 @@
 # cl session manager - tmux configuration
 # Deployed by Ansible to ~/.tmux-cl.conf
-
-# Source user config first (if exists)
-if-shell "test -f ~/.tmux.conf" "source-file ~/.tmux.conf"
+# User's ~/.tmux.conf is sourced LAST so it can override any setting below.
 
 # Terminal and color support
 set -g default-terminal "screen-256color"
 set -ga terminal-overrides ",*256col*:Tc"
 set -g focus-events on
 
-# Mouse support
+# Mouse and clipboard
 set -g mouse on
+set -s set-clipboard on
 
 # Cursor shape passthrough
 set -ga terminal-overrides '*:Ss=\E[%p1%d q:Se=\E[ q'
@@ -21,13 +20,21 @@ set -g history-limit 50000
 # Reduce escape time (faster key response)
 set -sg escape-time 10
 
-# Status bar
+# Claude Code status in tmux bar
+set -g status-interval 2
 set -g status-style 'bg=colour235 fg=colour136'
-set -g status-left '#[fg=colour39,bold] #S #[fg=colour245]| '
-set -g status-left-length 30
-set -g status-right '#[fg=colour245]%H:%M '
-set -g status-right-length 20
+set -g status-left-length 40
+set -g status-right-length 30
+set -g status-left "#(cat /tmp/claude-status-left-#{s/%%//:pane_id} 2>/dev/null) "
+set -g status-right "#(cat /tmp/claude-status-pane-#{s/%%//:pane_id} 2>/dev/null) %H:%M"
+
+# Hide window list (cl uses one window per session)
+set -g window-status-format ""
+set -g window-status-current-format ""
 
 # Pane border colors
 set -g pane-border-style 'fg=colour238'
 set -g pane-active-border-style 'fg=colour39'
+
+# Source user config LAST (overrides above defaults)
+if-shell "test -f ~/.tmux.conf" "source-file ~/.tmux.conf"
