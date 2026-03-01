@@ -9,7 +9,10 @@
 # Example:
 # my-server ansible_host=1.2.3.4 ansible_user=root
 
-# Optional: Override git config per group
+# Override git config per host:
+# my-server ansible_host=1.2.3.4 ansible_user=root host_git_user_name="Your Name" host_git_user_email="your@email.com"
+
+# Or per group (applies to all servers):
 # [claude_servers:vars]
-# git_user_name=Your Name
-# git_user_email=your@email.com
+# host_git_user_name=Your Name
+# host_git_user_email=your@email.com

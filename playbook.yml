@@ -8,8 +8,8 @@
     node_version: "lts/*"
     src_dir: "/src"
     dev_user: "dev"
-    git_user_name: "Claude Dev"
-    git_user_email: "dev@localhost"
+    git_user_name: "{{ host_git_user_name | default('Claude Dev') }}"
+    git_user_email: "{{ host_git_user_email | default('dev@localhost') }}"
     cl_default_permission_mode: "skip"  # "skip" = --dangerously-skip-permissions, "acceptEdits" = safer alternative
     claude_plugins:
       - code-review
