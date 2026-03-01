@@ -24,7 +24,7 @@ if [ "$TOTAL" -gt 0 ]; then
 fi
 
 # First-run hint
-if [ ! -f "$HOME/.claude/claude-gc.sh" ] || ! claude plugin list 2>/dev/null | grep -q context7; then
+if [ ! -f "$HOME/.claude/.init-done" ]; then
     echo -e "  \033[1;33m→ First time? Run 'claude-init' after completing Claude CLI setup.\033[0m"
     echo ""
 fi

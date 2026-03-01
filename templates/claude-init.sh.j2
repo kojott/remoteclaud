@@ -85,5 +85,9 @@ if [ "$FAILED" -eq 0 ]; then
 else
     echo -e "${YELLOW}${BOLD}Done with $FAILED warnings.${NC} Some plugins may need manual install."
 fi
+
+# Mark init as complete (used by MOTD to hide first-run hint)
+touch "$HOME/.claude/.init-done"
+
 echo -e "  Type ${BOLD}cl${NC} to start a Claude session."
 echo ""
