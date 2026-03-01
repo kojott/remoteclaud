@@ -1,78 +1,681 @@
 #!/bin/bash
-# Interactive Claude session manager
-# Shortcut: cl
+# cl - Claude session manager
+# Manages Claude CLI sessions inside tmux
+# Deployed by Ansible
 
-set -e
+set -eo pipefail
+
+# ============================================================================
+# SECTION 1: Constants
+# ============================================================================
+
+readonly VERSION="1.0.0"
+readonly SESSION_PREFIX="cl-"
+readonly LEGACY_PREFIX="claude-"
+readonly MAX_NAME_LEN=30
+readonly TMUX_CONF="$HOME/.tmux-cl.conf"
+readonly DEAD_SESSION_AGE=300  # 5 minutes in seconds
+
+{% if cl_default_permission_mode | default('skip') == 'skip' %}
+CLAUDE_ARGS="--dangerously-skip-permissions"
+{% else %}
+CLAUDE_ARGS="--permission-mode {{ cl_default_permission_mode }}"
+{% endif %}
+{% raw %}
 
 # Colors
-CYAN='\033[0;36m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly BLUE='\033[0;34m'
+readonly CYAN='\033[0;36m'
+readonly DIM='\033[2m'
+readonly BOLD='\033[1m'
+readonly NC='\033[0m'
 
-echo ""
-echo -e "${CYAN}═══════════════════════════════════════════════${NC}"
-echo -e "${CYAN}  CLAUDE SESSION MANAGER${NC}"
-echo -e "${CYAN}═══════════════════════════════════════════════${NC}"
-echo ""
+# ============================================================================
+# SECTION 2: Utility functions
+# ============================================================================
 
-# Get tmux sessions
-SESSIONS=$(tmux list-sessions 2>/dev/null || true)
-
-# Build menu
-declare -a SESSION_NAMES
-i=1
-
-if [ -n "$SESSIONS" ]; then
-    echo -e "${GREEN}Running sessions:${NC}"
-    echo ""
-    while IFS= read -r line; do
-        SESSION_NAME=$(echo "$line" | cut -d: -f1)
-        SESSION_NAMES+=("$SESSION_NAME")
-        echo -e "  ${YELLOW}[$i]${NC} $line"
-        ((i++))
-    done <<< "$SESSIONS"
-    echo ""
-fi
-
-# Add option for new session
-echo -e "  ${YELLOW}[$i]${NC} New session (claunch --tmux) in $(pwd)"
-NEW_SESSION_NUM=$i
-
-echo ""
-echo -e "${CYAN}═══════════════════════════════════════════════${NC}"
-echo ""
-
-# Read user input
-read -p "Select number (or Enter for new session): " choice
-
-# Default to new session
-if [ -z "$choice" ]; then
-    choice=$NEW_SESSION_NUM
-fi
-
-# Validate input
-if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
-    echo "Invalid choice."
+cl_die() {
+    echo -e "${RED}Error: $1${NC}" >&2
     exit 1
-fi
+}
 
-if [ "$choice" -lt 1 ] || [ "$choice" -gt "$NEW_SESSION_NUM" ]; then
-    echo "Number out of range."
-    exit 1
-fi
+cl_log() {
+    echo -e "${DIM}$1${NC}"
+}
 
-# Execute choice
-if [ "$choice" -eq "$NEW_SESSION_NUM" ]; then
+cl_sanitize_name() {
+    local name="$1"
+    name=$(echo "$name" | tr '[:upper:]' '[:lower:]')
+    name=$(echo "$name" | sed 's/[^a-z0-9-]/-/g')
+    name=$(echo "$name" | sed 's/-\{2,\}/-/g')
+    name=$(echo "$name" | sed 's/^-//;s/-$//')
+    echo "${name:0:$MAX_NAME_LEN}"
+}
+
+cl_detect_project() {
+    local dir="${1:-$(pwd)}"
+    basename "$dir" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g; s/-\{2,\}/-/g; s/^-//; s/-$//'
+}
+
+cl_relative_time() {
+    local seconds="$1"
+    if [ "$seconds" -lt 60 ]; then
+        echo "just now"
+    elif [ "$seconds" -lt 3600 ]; then
+        echo "$(( seconds / 60 ))m ago"
+    elif [ "$seconds" -lt 86400 ]; then
+        echo "$(( seconds / 3600 ))h ago"
+    else
+        echo "$(( seconds / 86400 ))d ago"
+    fi
+}
+
+cl_session_exists() {
+    tmux has-session -t "=$1" 2>/dev/null
+}
+
+cl_require() {
+    for cmd in "$@"; do
+        command -v "$cmd" >/dev/null 2>&1 || cl_die "'$cmd' not found in PATH"
+    done
+}
+
+cl_truncate() {
+    local str="$1" max="$2"
+    if [ "${#str}" -gt "$max" ]; then
+        echo "${str:0:$((max-1))}…"
+    else
+        echo "$str"
+    fi
+}
+
+# ============================================================================
+# SECTION 3: Core functions
+# ============================================================================
+
+cl_list_sessions() {
+    local sessions
+    sessions=$(tmux list-sessions -F '#{session_name}|#{session_attached}|#{session_activity}' 2>/dev/null || true)
+    if [ -z "$sessions" ]; then
+        echo "  No active sessions."
+        return 1
+    fi
+
+    local now
+    now=$(date +%s)
+
+    while IFS='|' read -r name attached activity; do
+        local status_str status_color age_str extra=""
+
+        if [ "$attached" -gt 0 ]; then
+            status_str="attached"
+            status_color="$GREEN"
+        else
+            status_str="detached"
+            status_color="$YELLOW"
+        fi
+
+        local age=$(( now - activity ))
+        age_str=$(cl_relative_time "$age")
+
+        # Detect worktree sessions
+        if [[ "$name" == *-wt-* ]]; then
+            local wt_name="${name##*-wt-}"
+            extra=" ${DIM}[wt]${NC}"
+        fi
+
+        # Detect legacy sessions
+        if [[ "$name" == ${LEGACY_PREFIX}* ]] && [[ "$name" != ${SESSION_PREFIX}* ]]; then
+            extra="${extra} ${DIM}[legacy]${NC}"
+        fi
+
+        local display_name
+        display_name=$(cl_truncate "$name" 25)
+
+        printf "  %-27s ${status_color}%-10s${NC} ${DIM}%8s${NC}%b\n" \
+            "$display_name" "$status_str" "$age_str" "$extra"
+    done <<< "$sessions"
+}
+
+cl_new_session() {
+    local name="$1"
+    local dir="${2:-$(pwd)}"
+    local project
+    project=$(cl_detect_project "$dir")
+    local session
+
+    if [ -n "$name" ]; then
+        session="${SESSION_PREFIX}${project}-${name}"
+    else
+        session="${SESSION_PREFIX}${project}"
+    fi
+
+    session=$(cl_sanitize_name "$session")
+
+    # Collision handling
+    if cl_session_exists "$session"; then
+        echo -e "  Session ${BOLD}${session}${NC} already exists."
+        read -rp "  Attach? [Y/n] " yn
+        case "$yn" in
+            [nN])
+                local suffix=2
+                while cl_session_exists "${session}-${suffix}"; do
+                    (( ++suffix ))
+                done
+                session="${session}-${suffix}"
+                cl_log "  Creating session: $session"
+                ;;
+            *)
+                cl_attach_session "$session"
+                return
+                ;;
+        esac
+    fi
+
+    cl_log "  Starting session: $session"
+
+    local tmux_args=(-f "$TMUX_CONF")
+    # shellcheck disable=SC2086
+    tmux "${tmux_args[@]}" new-session -d -s "$session" -c "$dir" \
+        "claude $CLAUDE_ARGS; echo ''; echo 'Claude exited. Press Enter to close or type cl to restart.'; read -r resp; [[ \"\$resp\" == 'cl' ]] && exec cl"
+    tmux attach -t "=$session"
+}
+
+cl_attach_session() {
+    local session="$1"
+    [ -z "$session" ] && cl_die "Session name required"
+
+    if ! cl_session_exists "$session"; then
+        cl_die "Session '$session' not found"
+    fi
+
+    # Check if attached elsewhere
+    local attached
+    attached=$(tmux list-sessions -F '#{session_name}|#{session_attached}' 2>/dev/null | grep "^${session}|" | cut -d'|' -f2)
+
+    if [ "$attached" -gt 0 ]; then
+        echo ""
+        echo -e "  Session ${BOLD}${session}${NC} is attached in another terminal."
+        echo -e "  ${YELLOW}[s]${NC} Steal (detach other client)  ${YELLOW}[a]${NC} Share session  ${YELLOW}[q]${NC} Cancel"
+        echo ""
+        read -rp "  Select [s/a/q]: " choice
+        case "$choice" in
+            s|S) exec tmux attach -dt "=$session" ;;
+            a|A) exec tmux attach -t "=$session" ;;
+            *) echo "  Cancelled."; return ;;
+        esac
+    else
+        exec tmux attach -t "=$session"
+    fi
+}
+
+cl_worktree_session() {
+    local name="$1"
+    cl_require git
+
+    if ! git rev-parse --show-toplevel >/dev/null 2>&1; then
+        cl_die "Not inside a git repository. Worktree sessions require git."
+    fi
+
+    local project
+    project=$(cl_detect_project "$(pwd)")
+    local wt_name="${name:-$(date +%s | tail -c 5)}"
+    local session="${SESSION_PREFIX}${project}-wt-${wt_name}"
+    session=$(cl_sanitize_name "$session")
+
+    if cl_session_exists "$session"; then
+        echo -e "  Worktree session ${BOLD}${session}${NC} already exists."
+        read -rp "  Attach? [Y/n] " yn
+        case "$yn" in
+            [nN]) echo "  Cancelled."; return ;;
+            *) cl_attach_session "$session"; return ;;
+        esac
+    fi
+
+    cl_log "  Starting worktree session: $session"
+    cl_log "  Claude will create worktree at .claude/worktrees/$wt_name"
+
+    local tmux_args=(-f "$TMUX_CONF")
+    # shellcheck disable=SC2086
+    tmux "${tmux_args[@]}" new-session -d -s "$session" -c "$(pwd)" \
+        "claude --worktree $wt_name $CLAUDE_ARGS; echo ''; echo 'Claude exited. Press Enter to close or type cl to restart.'; read -r resp; [[ \"\$resp\" == 'cl' ]] && exec cl"
+    tmux attach -t "=$session"
+}
+
+cl_continue_session() {
+    local project
+    project=$(cl_detect_project "$(pwd)")
+    local session="${SESSION_PREFIX}${project}-cont-$(date +%s | tail -c 5)"
+    session=$(cl_sanitize_name "$session")
+
+    cl_log "  Continuing last conversation in new session: $session"
+
+    local tmux_args=(-f "$TMUX_CONF")
+    # shellcheck disable=SC2086
+    tmux "${tmux_args[@]}" new-session -d -s "$session" -c "$(pwd)" \
+        "claude --continue $CLAUDE_ARGS; echo ''; echo 'Claude exited. Press Enter to close or type cl to restart.'; read -r resp; [[ \"\$resp\" == 'cl' ]] && exec cl"
+    tmux attach -t "=$session"
+}
+
+cl_resume_session() {
+    local project
+    project=$(cl_detect_project "$(pwd)")
+    local session="${SESSION_PREFIX}${project}-resume-$(date +%s | tail -c 5)"
+    session=$(cl_sanitize_name "$session")
+
+    cl_log "  Opening conversation picker in new session: $session"
+
+    local tmux_args=(-f "$TMUX_CONF")
+    # shellcheck disable=SC2086
+    tmux "${tmux_args[@]}" new-session -d -s "$session" -c "$(pwd)" \
+        "claude --resume $CLAUDE_ARGS; echo ''; echo 'Claude exited. Press Enter to close or type cl to restart.'; read -r resp; [[ \"\$resp\" == 'cl' ]] && exec cl"
+    tmux attach -t "=$session"
+}
+
+cl_cleanup() {
     echo ""
-    echo -e "${GREEN}Starting claunch --tmux...${NC}"
+    echo -e "${BOLD}  CLEANUP CANDIDATES${NC}"
     echo ""
-    exec claunch --tmux
-else
-    SESSION_INDEX=$((choice - 1))
-    SESSION_TO_ATTACH="${SESSION_NAMES[$SESSION_INDEX]}"
+
+    local found=0 now
+    now=$(date +%s)
+
+    # Phase 1: Dead sessions (no clients, Claude likely exited)
+    local dead_sessions=()
+    local sessions
+    sessions=$(tmux list-sessions -F '#{session_name}|#{session_attached}|#{session_activity}|#{pane_current_command}|#{session_path}' 2>/dev/null || true)
+
+    if [ -n "$sessions" ]; then
+        while IFS='|' read -r name attached activity cmd path; do
+            local age=$(( now - activity ))
+            # Dead = detached and inactive for >5 minutes
+            if [ "$attached" -eq 0 ] && [ "$age" -gt "$DEAD_SESSION_AGE" ]; then
+                dead_sessions+=("$name")
+                local age_str
+                age_str=$(cl_relative_time "$age")
+                local extra=""
+                if [[ "$name" == ${LEGACY_PREFIX}* ]] && [[ "$name" != ${SESSION_PREFIX}* ]]; then
+                    extra=" ${DIM}[legacy]${NC}"
+                fi
+                if [ "$found" -eq 0 ]; then
+                    echo -e "  ${BOLD}Dead sessions${NC} (detached, inactive >5min):"
+                fi
+                printf "    %-30s ${DIM}%8s${NC}%b\n" "$name" "$age_str" "$extra"
+                found=1
+            fi
+        done <<< "$sessions"
+    fi
+
+    # Phase 1b: Orphaned worktrees
+    local orphaned_wts=()
+    local git_root
+    git_root=$(git rev-parse --show-toplevel 2>/dev/null || true)
+
+    if [ -n "$git_root" ] && [ -d "$git_root/.claude/worktrees" ]; then
+        for wt_dir in "$git_root/.claude/worktrees"/*/; do
+            [ -d "$wt_dir" ] || continue
+            local wt_basename
+            wt_basename=$(basename "$wt_dir")
+            # Check if any session uses this worktree
+            local has_session=false
+            if [ -n "$sessions" ]; then
+                while IFS='|' read -r name _rest; do
+                    if [[ "$name" == *"-wt-${wt_basename}" ]]; then
+                        has_session=true
+                        break
+                    fi
+                done <<< "$sessions"
+            fi
+
+            if [ "$has_session" = false ]; then
+                orphaned_wts+=("$wt_dir")
+                local dirty=""
+                local dirty_count
+                dirty_count=$(git -C "$wt_dir" status --porcelain 2>/dev/null | wc -l || echo "0")
+                dirty_count=$(echo "$dirty_count" | tr -d ' ')
+                if [ "$dirty_count" -gt 0 ]; then
+                    dirty=" ${RED}($dirty_count uncommitted files!)${NC}"
+                else
+                    dirty=" ${GREEN}(clean)${NC}"
+                fi
+
+                if [ "$found" -eq 0 ] || [ "${#dead_sessions[@]}" -gt 0 ] && [ "${#orphaned_wts[@]}" -eq 1 ]; then
+                    echo ""
+                    echo -e "  ${BOLD}Orphaned worktrees${NC} (no active session):"
+                fi
+                printf "    %s%b\n" "$wt_dir" "$dirty"
+                found=1
+            fi
+        done
+    fi
+
+    # Phase 1c: Legacy session files
+    local legacy_files=()
+    for f in "$HOME"/.claude_session_*; do
+        [ -f "$f" ] || continue
+        legacy_files+=("$f")
+        if [ "${#legacy_files[@]}" -eq 1 ]; then
+            echo ""
+            echo -e "  ${BOLD}Legacy files:${NC}"
+        fi
+        echo "    $f"
+        found=1
+    done
+
+    if [ "$found" -eq 0 ]; then
+        echo "  Nothing to clean up."
+        return
+    fi
+
+    # Phase 2: Confirm
     echo ""
-    echo -e "${GREEN}Attaching to session: $SESSION_TO_ATTACH${NC}"
+    echo -e "  ${YELLOW}[a]${NC} Remove all clean items  ${YELLOW}[i]${NC} Review individually  ${YELLOW}[q]${NC} Cancel"
     echo ""
-    exec tmux attach -t "$SESSION_TO_ATTACH"
-fi
+    read -rp "  Select [a/i/q]: " action
+
+    case "$action" in
+        a|A)
+            # Remove dead sessions
+            for s in "${dead_sessions[@]}"; do
+                [ -z "$s" ] && continue
+                cl_log "  Killing session: $s"
+                tmux kill-session -t "=$s" 2>/dev/null || true
+            done
+            # Remove clean worktrees only
+            for wt in "${orphaned_wts[@]}"; do
+                [ -z "$wt" ] || [ ! -d "$wt" ] && continue
+                local dc
+                dc=$(git -C "$wt" status --porcelain 2>/dev/null | wc -l || echo "0")
+                dc=$(echo "$dc" | tr -d ' ')
+                if [ "$dc" -eq 0 ]; then
+                    cl_log "  Removing worktree: $wt"
+                    git worktree remove "$wt" 2>/dev/null || true
+                else
+                    echo -e "  ${YELLOW}Skipped${NC} $wt (has uncommitted changes)"
+                fi
+            done
+            # Remove legacy files
+            for f in "${legacy_files[@]}"; do
+                [ -z "$f" ] || [ ! -f "$f" ] && continue
+                cl_log "  Removing: $f"
+                rm -f "$f"
+            done
+            echo -e "  ${GREEN}Cleanup complete.${NC}"
+            ;;
+        i|I)
+            for s in "${dead_sessions[@]}"; do
+                [ -z "$s" ] && continue
+                read -rp "  Kill session '$s'? [y/N] " yn
+                [[ "$yn" =~ ^[yY]$ ]] && tmux kill-session -t "=$s" 2>/dev/null && cl_log "  Killed: $s"
+            done
+            for wt in "${orphaned_wts[@]}"; do
+                [ -z "$wt" ] || [ ! -d "$wt" ] && continue
+                local dc
+                dc=$(git -C "$wt" status --porcelain 2>/dev/null | wc -l || echo "0")
+                dc=$(echo "$dc" | tr -d ' ')
+                if [ "$dc" -gt 0 ]; then
+                    echo -e "  ${RED}WARNING: $wt has $dc uncommitted files${NC}"
+                fi
+                read -rp "  Remove worktree '$wt'? [y/N] " yn
+                [[ "$yn" =~ ^[yY]$ ]] && git worktree remove "$wt" 2>/dev/null && cl_log "  Removed: $wt"
+            done
+            for f in "${legacy_files[@]}"; do
+                [ -z "$f" ] || [ ! -f "$f" ] && continue
+                read -rp "  Remove '$f'? [y/N] " yn
+                [[ "$yn" =~ ^[yY]$ ]] && rm -f "$f" && cl_log "  Removed: $f"
+            done
+            echo -e "  ${GREEN}Done.${NC}"
+            ;;
+        *)
+            echo "  Cancelled."
+            ;;
+    esac
+}
+
+cl_help() {
+    echo ""
+    echo -e "${BOLD}cl${NC} - Claude session manager v${VERSION}"
+    echo ""
+    echo -e "${BOLD}USAGE${NC}"
+    echo "  cl                      Interactive menu (default)"
+    echo "  cl -a <name>            Attach to session directly"
+    echo "  cl -n <name>            New named session"
+    echo "  cl -w [name]            New worktree session"
+    echo "  cl -c                   New session from last conversation"
+    echo "  cl -r                   Pick past conversation to resume"
+    echo "  cl -l                   List sessions"
+    echo "  cl -x                   Clean up orphaned sessions"
+    echo "  cl -h                   Show this help"
+    echo ""
+    echo -e "${BOLD}EXAMPLES${NC}"
+    echo "  cl                      Start here - shows menu with all sessions"
+    echo "  cl -n fix-auth          New session named 'cl-myproj-fix-auth'"
+    echo "  cl -w new-feature       Worktree session via claude --worktree"
+    echo "  cl -a cl-myproj         Attach directly (skip menu)"
+    echo ""
+    echo -e "${BOLD}SESSIONS${NC}"
+    echo "  Sessions persist in tmux. Detach with Ctrl+B, D."
+    echo "  Reconnect via SSH and type 'cl' to reattach."
+    echo ""
+    echo -e "${BOLD}WORKTREES${NC}"
+    echo "  -w delegates to 'claude --worktree' for isolated git branches."
+    echo "  Must be inside a git repository."
+    echo ""
+}
+
+cl_menu() {
+    local sessions session_names=() session_states=() session_count=0
+    sessions=$(tmux list-sessions -F '#{session_name}|#{session_attached}|#{session_activity}' 2>/dev/null || true)
+
+    local now
+    now=$(date +%s)
+    local default_action="" default_num="" default_label=""
+    local detached_sessions=() detached_indices=()
+
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════════════════════${NC}"
+    printf "  ${BOLD}cl${NC} - Session Manager"
+    printf "%*s${DIM}%s${NC}\n" $(( 35 - ${#PWD} > 0 ? 35 - ${#PWD} : 1 )) "" "$(pwd)"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════${NC}"
+
+    if [ -n "$sessions" ]; then
+        echo ""
+        echo -e "  ${BOLD}SESSIONS${NC}"
+        echo ""
+
+        while IFS='|' read -r name attached activity; do
+            (( ++session_count ))
+            session_names+=("$name")
+            session_states+=("$attached")
+
+            local status_str status_color age_str extra=""
+
+            if [ "$attached" -gt 0 ]; then
+                status_str="attached"
+                status_color="$GREEN"
+            else
+                status_str="detached"
+                status_color="$YELLOW"
+                detached_sessions+=("$name")
+                detached_indices+=("$session_count")
+            fi
+
+            local age=$(( now - activity ))
+            age_str=$(cl_relative_time "$age")
+
+            if [[ "$name" == *-wt-* ]]; then
+                local wt_name="${name##*-wt-}"
+                extra=" ${DIM}[wt] ${wt_name}${NC}"
+            fi
+            if [[ "$name" == ${LEGACY_PREFIX}* ]] && [[ "$name" != ${SESSION_PREFIX}* ]]; then
+                extra="${extra} ${DIM}[legacy]${NC}"
+            fi
+
+            local display_name
+            display_name=$(cl_truncate "$name" 25)
+
+            printf "  ${YELLOW}[%d]${NC}  %-25s ${status_color}%-10s${NC} ${DIM}%8s${NC}%b\n" \
+                "$session_count" "$display_name" "$status_str" "$age_str" "$extra"
+        done <<< "$sessions"
+    fi
+
+    # Compute smart default
+    if [ "${#detached_sessions[@]}" -eq 1 ]; then
+        default_num="${detached_indices[0]}"
+        default_label="${default_num}"
+    elif [ "${#detached_sessions[@]}" -gt 1 ]; then
+        # Most recently active detached session - last in the detached list
+        # tmux sorts by activity, so take the first detached one
+        default_num="${detached_indices[0]}"
+        default_label="${default_num}"
+    else
+        default_action="n"
+        default_label="n"
+    fi
+
+    # Orphan count for cleanup badge
+    local orphan_count=0
+    local all_sessions
+    all_sessions=$(tmux list-sessions -F '#{session_name}|#{session_attached}|#{session_activity}' 2>/dev/null || true)
+    if [ -n "$all_sessions" ]; then
+        while IFS='|' read -r name attached activity; do
+            local age=$(( now - activity ))
+            if [ "$attached" -eq 0 ] && [ "$age" -gt "$DEAD_SESSION_AGE" ]; then
+                (( ++orphan_count ))
+            fi
+        done <<< "$all_sessions"
+    fi
+
+    echo ""
+    echo -e "  ${DIM}─────────────────────────────────────────────────────${NC}"
+    echo ""
+    printf "  ${YELLOW}[n]${NC}  New session        ${YELLOW}[w]${NC}  New worktree session\n"
+    printf "  ${YELLOW}[c]${NC}  New from last chat  ${YELLOW}[r]${NC}  Pick past conversation\n"
+    if [ "$orphan_count" -gt 0 ]; then
+        printf "  ${YELLOW}[x]${NC}  Clean up ${DIM}(%d orphaned)${NC}\n" "$orphan_count"
+    else
+        printf "  ${YELLOW}[x]${NC}  Clean up\n"
+    fi
+
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════════════════════${NC}"
+
+    local prompt_default=""
+    if [ -n "$default_label" ]; then
+        prompt_default=" or Enter for [${default_label}]"
+    fi
+
+    local range=""
+    if [ "$session_count" -gt 0 ]; then
+        range="1-${session_count}, "
+    fi
+
+    read -rp "  Select [${range}n, w, c, r, x]${prompt_default}: " choice
+
+    # Apply default
+    if [ -z "$choice" ]; then
+        if [ -n "$default_action" ]; then
+            choice="$default_action"
+        elif [ -n "$default_num" ]; then
+            choice="$default_num"
+        fi
+    fi
+
+    case "$choice" in
+        n|N)
+            read -rp "  Session name (Enter for default): " sname
+            cl_new_session "$sname"
+            ;;
+        w|W)
+            read -rp "  Worktree name (Enter for auto): " wname
+            cl_worktree_session "$wname"
+            ;;
+        c|C) cl_continue_session ;;
+        r|R) cl_resume_session ;;
+        x|X) cl_cleanup ;;
+        *[0-9]*)
+            if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "$session_count" ]; then
+                local idx=$(( choice - 1 ))
+                cl_attach_session "${session_names[$idx]}"
+            else
+                cl_die "Invalid selection: $choice"
+            fi
+            ;;
+        *)
+            cl_die "Invalid selection: $choice"
+            ;;
+    esac
+}
+
+# ============================================================================
+# SECTION 4: Argument parser
+# ============================================================================
+
+cl_main() {
+    cl_require claude tmux
+
+    local mode="" opt_name="" opt_worktree=""
+
+    while getopts ":a:n:w:crlxhv" opt; do
+        case "$opt" in
+            a)
+                [ -n "$mode" ] && cl_die "Cannot combine -${mode} and -a. Choose one mode."
+                mode="a"; opt_name="$OPTARG"
+                ;;
+            n)
+                [ -n "$mode" ] && cl_die "Cannot combine -${mode} and -n. Choose one mode."
+                mode="n"; opt_name="$OPTARG"
+                ;;
+            w)
+                [ -n "$mode" ] && cl_die "Cannot combine -${mode} and -w. Choose one mode."
+                mode="w"; opt_worktree="$OPTARG"
+                ;;
+            c)
+                [ -n "$mode" ] && cl_die "Cannot combine -${mode} and -c. Choose one mode."
+                mode="c"
+                ;;
+            r)
+                [ -n "$mode" ] && cl_die "Cannot combine -${mode} and -r. Choose one mode."
+                mode="r"
+                ;;
+            l)
+                [ -n "$mode" ] && cl_die "Cannot combine -${mode} and -l. Choose one mode."
+                mode="l"
+                ;;
+            x)
+                [ -n "$mode" ] && cl_die "Cannot combine -${mode} and -x. Choose one mode."
+                mode="x"
+                ;;
+            h) cl_help; exit 0 ;;
+            v) echo "cl v${VERSION}"; exit 0 ;;
+            \?) cl_die "Unknown option: -$OPTARG. Run 'cl -h' for help." ;;
+            :) cl_die "Option -$OPTARG requires an argument." ;;
+        esac
+    done
+
+    # Handle -w with optional argument (getopts consumed it, check if it's actually a flag)
+    if [ "$mode" = "w" ] && [ -z "$opt_worktree" ]; then
+        opt_worktree=""
+    fi
+
+    case "$mode" in
+        a) cl_attach_session "$opt_name" ;;
+        n) cl_new_session "$opt_name" ;;
+        w) cl_worktree_session "$opt_worktree" ;;
+        c) cl_continue_session ;;
+        r) cl_resume_session ;;
+        l) echo ""; cl_list_sessions; echo "" ;;
+        x) cl_cleanup ;;
+        "") cl_menu ;;
+    esac
+}
+
+# ============================================================================
+# SECTION 5: Entry point
+# ============================================================================
+
+cl_main "$@"
+{% endraw %}
